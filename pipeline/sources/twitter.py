@@ -3,8 +3,7 @@ import requests
 from datetime import datetime, timezone
 from typing import List, Dict
 
-APIFY_BASE = "https://api.apify.com/v2"
-ACTOR_ID = "quacker~twitter-scraper"
+BASE_URL = "https://scrapebadger.com/v1/twitter/tweets/advanced_search"
 
 SEARCH_QUERIES = [
     "Claude Anthropic workflow",
@@ -14,45 +13,45 @@ SEARCH_QUERIES = [
 
 
 def fetch_twitter() -> List[Dict]:
-    api_key = os.environ.get("APIFY_API_KEY")
+    api_key = os.environ.get("SCRAPEBADGER_API_KEY")
     if not api_key:
-        print("No Apify API key — skipping Twitter source")
+        print("No ScrapeBadger API key — skipping Twitter source")
         return []
 
     items = []
-    seen_urls = set()
+    seen_ids = set()
 
     for query in SEARCH_QUERIES:
         try:
-            run_response = requests.post(
-                f"{APIFY_BASE}/acts/{ACTOR_ID}/run-sync-get-dataset-items",
-                params={"token": api_key},
-                json={
-                    "searchTerms": [query],
-                    "maxItems": 10,
-                    "lang": "en",
-                    "since": _yesterday(),
-                },
-                timeout=120,
+            response = requests.get(
+                BASE_URL,
+                params={"query": query, "query_type": "Latest", "count": 10},
+                headers={"x-api-key": api_key},
+                timeout=30,
             )
-            run_response.raise_for_status()
-            tweets = run_response.json()
+            response.raise_for_status()
+            tweets = response.json().get("data", [])
 
             for tweet in tweets:
-                url = tweet.get("url") or tweet.get("tweetUrl", "")
-                text = tweet.get("text") or tweet.get("full_text", "")
-                created_at = tweet.get("createdAt") or tweet.get("created_at", "")
-
-                if not url or not text or url in seen_urls:
+                tweet_id = tweet.get("id")
+                if not tweet_id or tweet_id in seen_ids:
                     continue
-                seen_urls.add(url)
+                seen_ids.add(tweet_id)
+
+                # Skip retweets — originals only
+                if tweet.get("is_retweet"):
+                    continue
+
+                username = tweet.get("username", "")
+                text = tweet.get("full_text") or tweet.get("text", "")
+                url = f"https://x.com/{username}/status/{tweet_id}"
 
                 items.append({
                     "source": "twitter",
                     "url": url,
                     "original_title": text[:120] + ("..." if len(text) > 120 else ""),
                     "content": text,
-                    "content_date": created_at or datetime.now(timezone.utc).isoformat(),
+                    "content_date": _parse_date(tweet.get("created_at", "")),
                 })
 
         except Exception as e:
@@ -61,7 +60,9 @@ def fetch_twitter() -> List[Dict]:
     return items
 
 
-def _yesterday() -> str:
-    from datetime import timedelta
-    d = datetime.now(timezone.utc) - timedelta(days=1)
-    return d.strftime("%Y-%m-%d")
+def _parse_date(date_str: str) -> str:
+    try:
+        dt = datetime.strptime(date_str, "%a %b %d %H:%M:%S %z %Y")
+        return dt.isoformat()
+    except Exception:
+        return datetime.now(timezone.utc).isoformat()
