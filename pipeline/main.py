@@ -15,6 +15,7 @@ from scorer import score_and_summarise
 from database import get_existing_urls, save_items, auto_publish_ready_items
 
 SCORE_THRESHOLD = 5
+PER_SOURCE_CAP = 10  # max items scored per source per run
 
 SOURCES = [
     fetch_anthropic_blog,
@@ -33,11 +34,12 @@ def run():
     # Step 1: publish items that have been queued for 20+ hours
     auto_publish_ready_items()
 
-    # Step 2: fetch from all sources
+    # Step 2: fetch from all sources (capped per source)
     all_items = []
     for fetcher in SOURCES:
         try:
             items = fetcher()
+            items = items[:PER_SOURCE_CAP]
             print(f"  {fetcher.__name__}: {len(items)} items fetched")
             all_items.extend(items)
         except Exception as e:

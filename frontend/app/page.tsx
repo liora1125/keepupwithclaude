@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabase, Item } from "@/lib/supabase";
 import FeedCard from "@/components/FeedCard";
 import NewsletterSignup from "@/components/NewsletterSignup";
+import WorthFollowing from "@/components/WorthFollowing";
 
 async function getLatestItems(): Promise<Item[]> {
   const { data } = await supabase
@@ -65,6 +66,9 @@ export default async function HomePage() {
           </div>
         )}
       </section>
+
+      {/* Worth Following */}
+      <WorthFollowing />
 
       {/* Newsletter */}
       <NewsletterSignup />
