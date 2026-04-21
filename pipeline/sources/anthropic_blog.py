@@ -1,29 +1,44 @@
-import feedparser
+import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone
 from typing import List, Dict
 
-
-FEED_URL = "https://www.anthropic.com/rss.xml"
+NEWS_URL = "https://www.anthropic.com/news"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
 
 def fetch_anthropic_blog() -> List[Dict]:
-    feed = feedparser.parse(FEED_URL)
+    try:
+        response = requests.get(NEWS_URL, headers=HEADERS, timeout=15)
+        response.raise_for_status()
+    except Exception as e:
+        print(f"Failed to fetch Anthropic news: {e}")
+        return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+    seen = set()
     items = []
 
-    for entry in feed.entries:
-        parsed_date = entry.get("published_parsed") or entry.get("updated_parsed")
-        content = ""
-        if entry.get("content"):
-            content = entry.content[0].get("value", "")
-        elif entry.get("summary"):
-            content = entry.summary
+    for a in soup.find_all("a", href=True):
+        href = a.get("href", "")
+        if "/news/" not in href or href == "/news":
+            continue
+
+        url = f"https://www.anthropic.com{href}" if href.startswith("/") else href
+        if url in seen:
+            continue
+        seen.add(url)
+
+        text = a.get_text(separator=" ", strip=True)
+        if len(text) < 10:
+            continue
 
         items.append({
             "source": "anthropic_blog",
-            "url": entry.get("link", ""),
-            "original_title": entry.get("title", ""),
-            "content": content,
-            "content_date": datetime(*parsed_date[:6], tzinfo=timezone.utc).isoformat() if parsed_date else datetime.now(timezone.utc).isoformat(),
+            "url": url,
+            "original_title": text[:200],
+            "content": text,
+            "content_date": datetime.now(timezone.utc).isoformat(),
         })
 
-    return items
+    return items[:15]

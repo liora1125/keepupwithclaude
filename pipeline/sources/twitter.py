@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Dict
 
 APIFY_BASE = "https://api.apify.com/v2"
-ACTOR_ID = "apidojo/tweet-scraper"
+ACTOR_ID = "quacker~twitter-scraper"
 
 SEARCH_QUERIES = [
     "Claude Anthropic workflow",
@@ -20,6 +20,7 @@ def fetch_twitter() -> List[Dict]:
         return []
 
     items = []
+    seen_urls = set()
 
     for query in SEARCH_QUERIES:
         try:
@@ -29,7 +30,8 @@ def fetch_twitter() -> List[Dict]:
                 json={
                     "searchTerms": [query],
                     "maxItems": 10,
-                    "tweetLanguage": "en",
+                    "lang": "en",
+                    "since": _yesterday(),
                 },
                 timeout=120,
             )
@@ -41,8 +43,9 @@ def fetch_twitter() -> List[Dict]:
                 text = tweet.get("text") or tweet.get("full_text", "")
                 created_at = tweet.get("createdAt") or tweet.get("created_at", "")
 
-                if not url or not text:
+                if not url or not text or url in seen_urls:
                     continue
+                seen_urls.add(url)
 
                 items.append({
                     "source": "twitter",
@@ -56,3 +59,9 @@ def fetch_twitter() -> List[Dict]:
             print(f"Twitter fetch error for '{query}': {e}")
 
     return items
+
+
+def _yesterday() -> str:
+    from datetime import timedelta
+    d = datetime.now(timezone.utc) - timedelta(days=1)
+    return d.strftime("%Y-%m-%d")
