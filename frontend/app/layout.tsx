@@ -28,6 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/feed" className="hover:text-gray-900 transition-colors">
                 Feed
               </Link>
+              <Link href="/submit" className="hover:text-gray-900 transition-colors">
+                Submit
+              </Link>
               <Link
                 href="#newsletter"
                 className="bg-brand text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-brand-dark transition-colors"

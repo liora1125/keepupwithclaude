@@ -2,6 +2,8 @@ import Link from "next/link";
 
 const NAV = [
   { href: "/admin", label: "Items" },
+  { href: "/admin/quick", label: "Quick add" },
+  { href: "/admin/community", label: "Community" },
   { href: "/admin/submit", label: "Submit URL" },
   { href: "/admin/follows", label: "Worth Following" },
 ];
