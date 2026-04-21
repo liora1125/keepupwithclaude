@@ -5,10 +5,12 @@ from typing import List, Dict
 
 BASE_URL = "https://scrapebadger.com/v1/twitter/tweets/advanced_search"
 
+# Intent-based queries — surface people sharing real workflows and results
 SEARCH_QUERIES = [
-    "Claude Anthropic workflow",
-    "Claude AI use case",
-    "Anthropic Claude update",
+    '"using Claude" workflow -is:retweet lang:en min_faves:20',
+    '"built with Claude" -is:retweet lang:en min_faves:20',
+    '"Claude helped me" -is:retweet lang:en min_faves:15',
+    '"with Claude" demo built -is:retweet lang:en min_faves:30',
 ]
 
 
@@ -38,8 +40,11 @@ def fetch_twitter() -> List[Dict]:
                     continue
                 seen_ids.add(tweet_id)
 
-                # Skip retweets — originals only
                 if tweet.get("is_retweet"):
+                    continue
+
+                # Skip low-engagement tweets
+                if (tweet.get("favorite_count") or 0) < 10:
                     continue
 
                 username = tweet.get("username", "")

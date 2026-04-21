@@ -3,9 +3,18 @@ import requests
 from datetime import datetime, timezone
 from typing import List, Dict
 
-YOUTUBE_API = "https://www.googleapis.com/youtube/v3"
-SEARCH_QUERIES = ["Claude Anthropic", "Claude AI tutorial", "Anthropic AI"]
-MAX_RESULTS_PER_QUERY = 5
+YOUTUBE_SEARCH_API = "https://www.googleapis.com/youtube/v3/search"
+YOUTUBE_VIDEOS_API = "https://www.googleapis.com/youtube/v3/videos"
+
+# Queries targeting tutorials, demos, and real use cases — not news recaps
+SEARCH_QUERIES = [
+    "Claude AI tutorial workflow",
+    "built with Claude Anthropic",
+    "using Claude to automate",
+    "Claude AI how I use",
+]
+
+MIN_VIEW_COUNT = 500
 
 
 def fetch_youtube() -> List[Dict]:
@@ -19,35 +28,56 @@ def fetch_youtube() -> List[Dict]:
 
     for query in SEARCH_QUERIES:
         try:
-            response = requests.get(
-                f"{YOUTUBE_API}/search",
+            search_resp = requests.get(
+                YOUTUBE_SEARCH_API,
                 params={
                     "part": "snippet",
                     "q": query,
                     "type": "video",
-                    "order": "date",
-                    "maxResults": MAX_RESULTS_PER_QUERY,
-                    "publishedAfter": _yesterday_iso(),
+                    "order": "relevance",
+                    "maxResults": 8,
                     "relevanceLanguage": "en",
+                    "videoDuration": "medium",  # 4–20 min — filters out Shorts and podcasts
                     "key": api_key,
                 },
                 timeout=15,
             )
-            response.raise_for_status()
-            data = response.json()
+            search_resp.raise_for_status()
+            results = search_resp.json().get("items", [])
 
-            for result in data.get("items", []):
-                video_id = result["id"]["videoId"]
+            video_ids = [r["id"]["videoId"] for r in results if r["id"]["videoId"] not in seen_ids]
+            if not video_ids:
+                continue
+
+            # Fetch view counts in one call
+            stats_resp = requests.get(
+                YOUTUBE_VIDEOS_API,
+                params={"part": "statistics,snippet", "id": ",".join(video_ids), "key": api_key},
+                timeout=15,
+            )
+            stats_resp.raise_for_status()
+            video_data = {v["id"]: v for v in stats_resp.json().get("items", [])}
+
+            for video_id in video_ids:
                 if video_id in seen_ids:
                     continue
-                seen_ids.add(video_id)
 
-                snippet = result["snippet"]
+                video = video_data.get(video_id)
+                if not video:
+                    continue
+
+                view_count = int(video.get("statistics", {}).get("viewCount", 0))
+                if view_count < MIN_VIEW_COUNT:
+                    continue
+
+                seen_ids.add(video_id)
+                snippet = video["snippet"]
+
                 items.append({
                     "source": "youtube",
                     "url": f"https://www.youtube.com/watch?v={video_id}",
                     "original_title": snippet.get("title", ""),
-                    "content": snippet.get("description", ""),
+                    "content": snippet.get("description", "")[:800],
                     "content_date": snippet.get("publishedAt", datetime.now(timezone.utc).isoformat()),
                     "image_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
                 })
@@ -56,9 +86,3 @@ def fetch_youtube() -> List[Dict]:
             print(f"YouTube fetch error for '{query}': {e}")
 
     return items
-
-
-def _yesterday_iso() -> str:
-    from datetime import timedelta
-    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
-    return yesterday.strftime("%Y-%m-%dT%H:%M:%SZ")
